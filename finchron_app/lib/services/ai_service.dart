@@ -5,7 +5,10 @@ class AIService {
   factory AIService() => _instance;
 
   // Replace with your actual Gemini API key
-  static const String _apiKey ="AIzaSyAi_yZIgd8pxvMnOhu2i1sFqqhh9pNn2OU";
+  static const String _apiKey = String.fromEnvironment(
+    'GEMINI_API_KEY',
+    defaultValue: '',
+  );
   GenerativeModel? _model;
   ChatSession? _chatSession;
 
@@ -20,7 +23,9 @@ class AIService {
     }
 
     try {
-      print('Initializing Gemini model with API key: ${_apiKey.substring(0, 10)}...');
+      print(
+        'Initializing Gemini model with API key: ${_apiKey.substring(0, 10)}...',
+      );
       _model = GenerativeModel(
         model: 'gemini-1.5-flash',
         apiKey: _apiKey,
@@ -31,7 +36,7 @@ class AIService {
           'Use emojis and bullet points for better readability. '
           'Do NOT use markdown formatting like **bold** or *italic*. '
           'Use plain text with emojis and bullet points only. '
-          'Always provide practical financial advice.'
+          'Always provide practical financial advice.',
         ),
       );
       _chatSession = _model!.startChat();
@@ -43,16 +48,19 @@ class AIService {
     }
   }
 
-  Future<String> sendMessage(String message, {List<Map<String, dynamic>>? context}) async {
+  Future<String> sendMessage(
+    String message, {
+    List<Map<String, dynamic>>? context,
+  }) async {
     try {
       // Check if model is initialized, try to reinitialize if not
       if (!_isModelInitialized()) {
         print('Model not initialized, attempting to reinitialize...');
         _initializeGemini();
-        
+
         // Wait a bit for initialization
         await Future.delayed(const Duration(milliseconds: 500));
-        
+
         if (!_isModelInitialized()) {
           return 'AI service could not be initialized. Please check your internet connection and API key.';
         }
@@ -61,34 +69,42 @@ class AIService {
       // Add context if provided (user's financial data)
       String contextualMessage = message;
       if (context != null && context.isNotEmpty) {
-        contextualMessage = 'Based on my financial data: $context\n\nQuestion: $message';
+        contextualMessage =
+            'Based on my financial data: $context\n\nQuestion: $message';
       }
 
-      print('Sending message to Gemini: ${contextualMessage.substring(0, contextualMessage.length > 50 ? 50 : contextualMessage.length)}...');
-      
+      print(
+        'Sending message to Gemini: ${contextualMessage.substring(0, contextualMessage.length > 50 ? 50 : contextualMessage.length)}...',
+      );
+
       final response = await _chatSession!.sendMessage(
         Content.text(contextualMessage),
       );
 
       if (response.text != null && response.text!.isNotEmpty) {
-        print('Received response from Gemini: ${response.text!.substring(0, response.text!.length > 50 ? 50 : response.text!.length)}...');
+        print(
+          'Received response from Gemini: ${response.text!.substring(0, response.text!.length > 50 ? 50 : response.text!.length)}...',
+        );
         return response.text!.trim();
       } else {
         return 'Sorry, I couldn\'t generate a response. Please try rephrasing your question.';
       }
     } catch (e) {
       print('Gemini AI Service Error: $e');
-      
-      if (e.toString().contains('API_KEY') || e.toString().contains('permission')) {
+
+      if (e.toString().contains('API_KEY') ||
+          e.toString().contains('permission')) {
         return 'Invalid API key. Please check your Gemini API key configuration.';
-      } else if (e.toString().contains('quota') || e.toString().contains('billing')) {
+      } else if (e.toString().contains('quota') ||
+          e.toString().contains('billing')) {
         return 'API quota exceeded. Please check your billing settings in Google AI Studio.';
-      } else if (e.toString().contains('network') || e.toString().contains('timeout')) {
+      } else if (e.toString().contains('network') ||
+          e.toString().contains('timeout')) {
         return 'Network error. Please check your internet connection and try again.';
       } else if (e.toString().contains('SAFETY')) {
         return 'Sorry, I cannot provide a response to that request. Please try rephrasing your question.';
       }
-      
+
       return 'Sorry, I\'m having trouble connecting right now. Error: ${e.toString().length > 100 ? e.toString().substring(0, 100) : e.toString()}';
     }
   }
@@ -137,37 +153,39 @@ class AIService {
     ];
   }
 
-  Future<String> analyzeExpenses(List<Map<String, dynamic>> transactions) async {
+  Future<String> analyzeExpenses(
+    List<Map<String, dynamic>> transactions,
+  ) async {
     if (transactions.isEmpty) {
       return 'You don\'t have any transactions to analyze yet. Start by adding some expenses to get personalized insights!';
     }
-    
+
     // Simple analysis of expenses
     double totalExpenses = 0;
     Map<String, double> categoryTotals = {};
-    
+
     for (var transaction in transactions) {
       if (transaction['type'] == 'expense') {
         double amount = (transaction['amount'] as num).toDouble();
         totalExpenses += amount;
-        
+
         String category = transaction['category'] ?? 'Other';
         categoryTotals[category] = (categoryTotals[category] ?? 0) + amount;
       }
     }
-    
+
     if (totalExpenses == 0) {
       return 'No expense transactions found. Add some expenses to get detailed analysis!';
     }
-    
+
     // Find top category
     String topCategory = categoryTotals.entries
         .reduce((a, b) => a.value > b.value ? a : b)
         .key;
-    
+
     double topCategoryAmount = categoryTotals[topCategory]!;
     double topCategoryPercentage = (topCategoryAmount / totalExpenses) * 100;
-    
+
     return 'Expense Analysis:\n\n'
         '💰 Total Expenses: \$${totalExpenses.toStringAsFixed(2)}\n'
         '📊 Top Category: $topCategory (${topCategoryPercentage.toStringAsFixed(1)}%)\n'
