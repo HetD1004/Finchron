@@ -1,0 +1,73 @@
+name: iOS Build (IPA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-name:
+        description: 'Build name (version)'
+        required: false
+      build-number:
+        description: 'Build number'
+        required: false
+      export-method:
+        description: 'Export method (app-store|ad-hoc|development)'
+        required: false
+        default: 'app-store'
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+
+      - name: Install CocoaPods (bundler optional)
+        run: |
+          sudo gem install cocoapods -v 1.11.3 || true
+          pod --version || true
+
+      - name: Decode and install provisioning (optional)
+        if: secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_PROVISIONING_PROFILE != ''
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p actions build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          mkdir -p ~/provisioning
+          echo "$APPLE_PROVISIONING_PROFILE" | base64 --decode > ~/provisioning/profile.mobileprovision
+          echo "Imported certificate and provisioning profile"
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+
+      - name: Install pods
+        working-directory: ./
+        run: |
+          cd finchron_app/ios
+          pod install --repo-update
+
+      - name: Get Flutter packages
+        working-directory: ./finchron_app
+        run: flutter pub get
+
+      - name: Build IPA
+        working-directory: ./finchron_app
+        run: |
+          flutter build ipa --export-method=${{ github.event.inputs.export-method || 'app-store' }} \
+            --build-name=${{ github.event.inputs.build-name || '' }} \
+            --build-number=${{ github.event.inputs.build-number || '' }} \
+            --export-options-plist="ios/ExportOptions.plist"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: finchron_app/build/ios/ipa/
